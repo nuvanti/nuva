@@ -1,9 +1,19 @@
 import { ensureDir } from "https://deno.land/std/fs/mod.ts";
 import { join } from "https://deno.land/std/path/mod.ts";
+import { exists } from "https://deno.land/std/fs/mod.ts";
 
 function getBinDir() {
     const homeDir = Deno.env.get("HOME")!;
     return join(homeDir, ".nuva", "bin");
+}
+
+async function fileExists(filePath: string) {
+    try {
+        const _f = await Deno.stat(filePath);
+        return true;
+    } catch {
+        return false
+    }
 }
 
 function isWindows() {
@@ -67,16 +77,25 @@ async function downloadZip() {
     const dir = getBinDir();
     await ensureDir(dir);
     const response = await fetch("https://raw.githubusercontent.com/nuvanti/nuva/main/latest.txt", { cache: "reload" });
-    const version = await response.text();
+    const version = (await response.text()).trim();
     console.log(`downloading nuva version: ${version}`);
     const fileUrl = `https://github.com/nuvanti/nuva/releases/download/${version}/${getFileName()}`
-    console.log(fileUrl);
     const data = (await fetch(fileUrl)).arrayBuffer();
-    const filePath = join(dir, "nuva.zip");
-    await Deno.writeFile(filePath, new Uint8Array(await data))
-    console.log("successfully downloaded zip file");
-    await unzip(filePath, dir);
-    console.log("nuva successfully installed. Please add $HOME/.nuva/bin to your path:");
+    const zipFilePath = join(dir, "nuva.zip");
+    const filePath = join(dir, "nuva")
+    await Deno.writeFile(zipFilePath, new Uint8Array(await data))
+    if (await fileExists(filePath)) {
+        Deno.removeSync(filePath);
+    }
+    await unzip(zipFilePath, dir);
+    await Deno.remove(zipFilePath);
+    if (Deno.build.os !== "windows") {
+        Deno.chmod(filePath, 0o777);
+        console.log("nuva successfully installed. Please add $HOME/.nuva/bin to your path:");
+    } else {
+        console.log("nuva successfully installed. Please add %HOME%/.nuva/bin to your path:");
+    }
+
 }
 
 //console.log(`installing nuva for ${Deno.build.os}:${Deno.build.arch}`);
